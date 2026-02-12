@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Debug Panel - CAV</title>
+    <style>
+        body { 
+            font-family: monospace; 
+            background: #1a1a2e; 
+            color: #e2e8f0; 
+            padding: 20px;
+            margin: 0;
+        }
+        h1 { color: #ec4899; }
+        h2 { color: #8b5cf6; margin-top: 30px; border-bottom: 1px solid #333; padding-bottom: 10px; }
+        .section { 
+            background: #16213e; 
+            padding: 15px; 
+            border-radius: 8px; 
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        .success { color: #4ade80; }
+        .error { color: #f87171; }
+        .warning { color: #fbbf24; }
+        .info { color: #60a5fa; }
+        pre { 
+            background: #0f0f23; 
+            padding: 10px; 
+            border-radius: 4px; 
+            overflow: auto;
+            font-size: 11px;
+            max-height: 300px;
+        }
+        button {
+            background: #ec4899;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 5px;
+            font-size: 14px;
+        }
+        button:hover { background: #db2777; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+        @media (max-width: 800px) { .grid { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <h1>🔧 Debug Panel</h1>
+    <p>Diagnostic information for Creative Asset Validator</p>
+    
+    <div>
+        <button onclick="runAllDiagnostics()">🔄 Refresh All</button>
+        <button onclick="location.href='../index.html'">← Back to App</button>
+    </div>
+
+    <div class="grid">
+        <div>
+            <h2>👤 Session Status</h2>
+            <div class="section" id="session-status">Loading...</div>
+            
+            <h2>🔑 API Keys Status</h2>
+            <div class="section" id="api-keys-status">Loading...</div>
+            
+            <h2>🔗 API Key Sharing</h2>
+            <div class="section" id="sharing-status">Loading...</div>
+        </div>
+        
+        <div>
+            <h2>💾 LocalStorage Keys</h2>
+            <div class="section" id="localstorage-keys">Loading...</div>
+            
+            <h2>📦 SessionStorage</h2>
+            <div class="section" id="sessionstorage-keys">Loading...</div>
+            
+            <h2>🔄 Sync Engine</h2>
+            <div class="section" id="sync-status">Loading...</div>
+        </div>
+    </div>
+    
+    <h2>📋 Platform Credentials (Raw)</h2>
+    <div class="section">
+        <pre id="platform-creds">Loading...</pre>
+    </div>
+    
+    <h2>🎛️ Access Control Config (Raw)</h2>
+    <div class="section">
+        <pre id="access-control">Loading...</pre>
+    </div>
+
+    <!-- Load the app's scripts to access its objects -->
+    <script src="../auth-config.js"></script>
+    <script src="../settings-module.js"></script>
+    <script src="../security-core.js"></script>
+    <script src="../sync-engine.js"></script>
+    
+    <script>
+        function runAllDiagnostics() {
+            checkSession();
+            checkAPIKeys();
+            checkSharing();
+            checkLocalStorage();
+            checkSessionStorage();
+            checkSyncEngine();
+            checkPlatformCreds();
+            checkAccessControl();
+        }
+        
+        function checkSession() {
+            const el = document.getElementById('session-status');
+            try {
+                const session = window.CAVSecurity?.SecureSessionManager?.getSession?.() || 
+                               window.cavUserSession ||
+                               JSON.parse(localStorage.getItem('cav_secure_session_v3') || 'null');
+                
+                if (session) {
+                    el.innerHTML = `
+                        <p class="success">✅ Logged in</p>
+                        <p><strong>Email:</strong> ${session.email || 'N/A'}</p>
+                        <p><strong>Name:</strong> ${session.name || 'N/A'}</p>
+                        <p><strong>Role:</strong> ${session.role || 'N/A'}</p>
+                        <p><strong>User Type:</strong> ${session.userType || 'N/A'}</p>
+                    `;
+                } else {
+                    el.innerHTML = '<p class="error">❌ Not logged in</p>';
+                }
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkAPIKeys() {
+            const el = document.getElementById('api-keys-status');
+            try {
+                const providers = ['claude', 'openai', 'gemini', 'searchapi'];
+                let html = '';
+                
+                providers.forEach(provider => {
+                    const key = window.CAVSettings?.manager?.getAPIKey?.(provider);
+                    const hasKey = key && key.length > 10;
+                    html += `<p class="${hasKey ? 'success' : 'warning'}">
+                        ${hasKey ? '✅' : '⚠️'} ${provider}: ${hasKey ? key.substring(0, 15) + '...' : 'Not set'}
+                    </p>`;
+                });
+                
+                el.innerHTML = html || '<p class="info">Settings module not loaded</p>';
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkSharing() {
+            const el = document.getElementById('sharing-status');
+            try {
+                const accessControl = JSON.parse(localStorage.getItem('cav_api_access_control') || '{}');
+                const platformCreds = JSON.parse(localStorage.getItem('cav_platform_credentials') || '{}');
+                
+                let html = '';
+                
+                const sharingEnabled = accessControl.enabled || platformCreds.sharing?.enabled;
+                html += `<p class="${sharingEnabled ? 'success' : 'warning'}">
+                    Sharing Enabled: ${sharingEnabled ? '✅ Yes' : '❌ No'}
+                </p>`;
+                
+                const globalShare = accessControl.globalUniversalShare || platformCreds.sharing?.globalUniversalShare;
+                html += `<p class="info">Global Share: ${globalShare ? '✅ Yes' : '❌ No'}</p>`;
+                
+                const allowedUsers = accessControl.allowedUsers || [];
+                html += `<p class="info">Allowed Users: ${allowedUsers.length > 0 ? allowedUsers.join(', ') : 'None'}</p>`;
+                
+                const sharedKeys = accessControl.sharedKeys || platformCreds.sharedKeys || {};
+                html += `<p class="info">Shared Keys Configured: ${Object.keys(sharedKeys).length}</p>`;
+                
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkLocalStorage() {
+            const el = document.getElementById('localstorage-keys');
+            try {
+                const keys = Object.keys(localStorage).filter(k => k.includes('cav') || k.includes('CAV'));
+                let html = `<p class="info">Found ${keys.length} CAV-related keys:</p><ul>`;
+                keys.forEach(k => {
+                    const val = localStorage.getItem(k);
+                    const size = val ? val.length : 0;
+                    html += `<li>${k} (${size} chars)</li>`;
+                });
+                html += '</ul>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkSessionStorage() {
+            const el = document.getElementById('sessionstorage-keys');
+            try {
+                const keys = Object.keys(sessionStorage);
+                if (keys.length === 0) {
+                    el.innerHTML = '<p class="info">SessionStorage is empty</p>';
+                    return;
+                }
+                let html = `<p class="info">Found ${keys.length} keys:</p><ul>`;
+                keys.forEach(k => {
+                    html += `<li>${k}</li>`;
+                });
+                html += '</ul>';
+                el.innerHTML = html;
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkSyncEngine() {
+            const el = document.getElementById('sync-status');
+            try {
+                if (window.syncEngine || window.SyncEngine) {
+                    const engine = window.syncEngine;
+                    el.innerHTML = `
+                        <p class="success">✅ Sync Engine Loaded</p>
+                        <p>Authenticated: ${engine?.isAuthenticated?.() ? '✅ Yes' : '❌ No'}</p>
+                        <p>Session Token: ${engine?.sessionToken ? '✅ Present' : '❌ Missing'}</p>
+                    `;
+                } else {
+                    el.innerHTML = '<p class="warning">⚠️ Sync Engine not initialized</p>';
+                }
+            } catch (e) {
+                el.innerHTML = `<p class="error">Error: ${e.message}</p>`;
+            }
+        }
+        
+        function checkPlatformCreds() {
+            const el = document.getElementById('platform-creds');
+            try {
+                const creds = localStorage.getItem('cav_platform_credentials');
+                if (creds) {
+                    const parsed = JSON.parse(creds);
+                    if (parsed.cloudinary?.apiSecret) parsed.cloudinary.apiSecret = '***HIDDEN***';
+                    if (parsed.sharedKeys) {
+                        Object.keys(parsed.sharedKeys).forEach(k => {
+                            if (parsed.sharedKeys[k]?.key) {
+                                parsed.sharedKeys[k].key = parsed.sharedKeys[k].key.substring(0, 10) + '...';
+                            }
+                        });
+                    }
+                    el.textContent = JSON.stringify(parsed, null, 2);
+                } else {
+                    el.textContent = 'Not found';
+                }
+            } catch (e) {
+                el.textContent = `Error: ${e.message}`;
+            }
+        }
+        
+        function checkAccessControl() {
+            const el = document.getElementById('access-control');
+            try {
+                const config = localStorage.getItem('cav_api_access_control');
+                if (config) {
+                    const parsed = JSON.parse(config);
+                    if (parsed.sharedKeys) {
+                        Object.keys(parsed.sharedKeys).forEach(k => {
+                            if (parsed.sharedKeys[k]?.key) {
+                                parsed.sharedKeys[k].key = parsed.sharedKeys[k].key.substring(0, 10) + '...';
+                            }
+                        });
+                    }
+                    el.textContent = JSON.stringify(parsed, null, 2);
+                } else {
+                    el.textContent = 'Not found';
+                }
+            } catch (e) {
+                el.textContent = `Error: ${e.message}`;
+            }
+        }
+        
+        setTimeout(runAllDiagnostics, 500);
+    </script>
+</body>
+</html>
