@@ -1,4 +1,4 @@
-# Creative Asset Validator
+# creative asset generator for paid media
 
 **Enterprise-Grade Creative Intelligence Platform**
 
